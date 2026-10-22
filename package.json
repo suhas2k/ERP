@@ -1,0 +1,12 @@
+{
+  "name": "astra-agentic-erp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A self-contained agentic ERP workflow automation demo",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

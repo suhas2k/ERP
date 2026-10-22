@@ -1,0 +1,11 @@
+Dataset: Online Retail (UCI Machine Learning Repository)
+Original creator: Daqing Chen
+Source page: https://archive.ics.uci.edu/dataset/352/online-retail
+DOI: https://doi.org/10.24432/C5BW33
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+Source coverage: UK online-retail transactions from 2010-12-01 through 2011-12-09.
+Source records: 541,909 transaction lines.
+
+Preparation: exported the original UCI workbook sheet to UTF-8 CSV. Original columns and records are retained. CustomerID is represented as a whole-number identifier; missing values remain blank. No transaction rows were added or removed.
+
+Important: this is authentic historical data, not a current/live feed. It contains transaction line items and is not directly compatible with this ERP app's inventory/invoice-summary CSV importer. Use the app templates for those imports, or connect your own current company CSV for live file sync.

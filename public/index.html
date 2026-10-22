@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fb">
+  <meta name="description" content="Astra ERP — a live operations workspace for orders, stock, invoices, and workflows.">
+  <title>Astra ERP · Operations workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <div><div class="brand-name">astra<span>.</span></div><div class="brand-caption">OPERATIONS CLOUD</div></div>
+        <button class="sidebar-close icon-button" id="closeSidebar" aria-label="Close navigation"></button>
+      </div>
+
+      <button class="workspace-switcher" data-action="set-business">
+        <span class="workspace-avatar">W</span><span class="workspace-copy"><b id="businessName">Your workspace</b><small>Local workspace</small></span><span class="chevron"></span>
+      </button>
+
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon" data-icon="grid"></span><span>Overview</span></button>
+        <button class="nav-item" data-view="orders"><span class="nav-icon" data-icon="orders"></span><span>Orders</span><span class="nav-count" id="navOrders">0</span></button>
+        <button class="nav-item" data-view="inventory"><span class="nav-icon" data-icon="inventory"></span><span>Inventory</span><span class="nav-count" id="navInventory">0</span></button>
+        <button class="nav-item" data-view="invoices"><span class="nav-icon" data-icon="receipt"></span><span>Invoices</span><span class="nav-count" id="navInvoices">0</span></button>
+        <button class="nav-item" data-view="workflows"><span class="nav-icon" data-icon="workflow"></span><span>Workflows</span><span class="nav-count nav-count-ai" id="navWorkflows">0</span></button>
+      </nav>
+
+      <div class="nav-label nav-label-lower">MANAGE</div>
+      <nav class="main-nav" aria-label="Management navigation">
+        <button class="nav-item" data-view="approvals"><span class="nav-icon" data-icon="checklist"></span><span>Approvals</span><span class="pending-count" id="sidebarPending">0</span></button>
+        <button class="nav-item" data-view="sync"><span class="nav-icon" data-icon="activity"></span><span>Live data sync</span></button>
+        <button class="nav-item" data-view="activity"><span class="nav-icon" data-icon="activity"></span><span>Activity log</span></button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-agent-card">
+        <div class="agent-card-top"><span class="agent-orb"><span></span></span><span class="live-pill"><i></i> LIVE</span></div>
+        <strong>Astra is ready</strong>
+        <p>Runs on your saved workspace records.</p>
+        <button class="agent-card-link" data-view="workflows">View workflows <span>↗</span></button>
+      </div>
+      <div class="profile-row">
+        <div class="profile-avatar">W</div><div class="profile-copy"><b>Workspace owner</b><small>Local account · no login</small></div><button class="profile-menu icon-button" data-action="export" aria-label="Export workspace data" title="Export workspace data"><span data-icon="receipt"></span></button>
+      </div>
+    </aside>
+    <div class="mobile-scrim" id="mobileScrim"></div>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-left"><button class="mobile-menu icon-button" id="openSidebar" aria-label="Open navigation"></button><div class="breadcrumb"><span>Workspace</span><span class="crumb-slash">/</span><b id="breadcrumbCurrent">Overview</b></div></div>
+        <div class="topbar-right"><div class="system-status" id="connectionStatus"><span class="system-dot"></span> Live updates connecting…</div><button class="icon-button topbar-icon" id="helpButton" aria-label="Help" title="Help"><span data-icon="help"></span></button><button class="icon-button topbar-icon notification-button" id="notificationButton" aria-label="Approvals" title="Open approvals"><span data-icon="bell"></span><i></i></button><div class="topbar-divider"></div><div class="top-avatar">W</div></div>
+      </header>
+      <section id="view" class="view-content" aria-live="polite"><div class="loading-state"><span class="spinner"></span>Preparing your workspace…</div></section>
+    </main>
+  </div>
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <div id="modalRoot"></div>
+  <script src="/csv-sync.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

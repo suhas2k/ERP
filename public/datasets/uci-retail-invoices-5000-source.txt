@@ -1,0 +1,10 @@
+Dataset: UCI Online Retail historical invoice summary (5,000 records)
+Original source: Daqing Chen, Online Retail, UCI Machine Learning Repository
+Source page: https://archive.ics.uci.edu/dataset/352/online-retail
+DOI: https://doi.org/10.24432/C5BW33
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+Source coverage: 2010-12-01 through 2011-12-09; original dataset has 541,909 transaction lines.
+
+This import-ready CSV is a 5,000-invoice sample selected across the source period. Each invoice amount is calculated by summing the original line quantity multiplied by its unit price. Only complete, positive-value invoices with one known customer ID and one invoice date are included; cancellation invoices, returns/negative lines, and invoices with missing or inconsistent customer/date fields are excluded. Customer labels display the source customer ID because the source has no customer names. Currency is GBP, as specified by the source.
+
+The source contains no payment status or due date. Those fields are intentionally marked Untracked and left blank; no due dates, payment outcomes, or customer names were invented. The full original transaction-line CSV is also available separately, unchanged.
