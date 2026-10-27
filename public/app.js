@@ -24,7 +24,9 @@ const iconPaths = {
   check: '<path d="m5 12 4 4L19 6"/>',
   x: '<path d="m18 6-12 12M6 6l12 12"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.3 1.7c-1.1 1.1-1.8 1.3-1.8 3M12 17h.01"/>',
-  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>'
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+  theme: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
 };
 function icon(name, size = 18) {
   return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (iconPaths[name] || iconPaths.spark) + '</svg>';
@@ -384,7 +386,8 @@ function openAdjustModal(id) {
   document.querySelector('#adjustForm').dataset.itemId = id;
 }
 function openBusinessModal() {
-  modal('Workspace settings', 'SETTINGS', '<label class="form-field">Business or workspace name<input name="name" maxlength="100" required value="' + esc(state.db.business.name) + '"></label><p class="form-note">This only labels this local workspace.</p>', 'businessForm');
+  const currentCurrency = state.db?.business?.currency || 'INR';
+  modal('Workspace settings', 'SETTINGS', '<label class="form-field">Business or workspace name<input name="name" maxlength="100" placeholder="e.g. Acme Operations" value="' + esc(state.db.business.name) + '"></label><label class="form-field">Workspace currency<select name="currency"><option value="INR"' + (currentCurrency === 'INR' ? ' selected' : '') + '>INR (₹) · Indian Rupee</option><option value="USD"' + (currentCurrency === 'USD' ? ' selected' : '') + '>USD ($) · US Dollar</option><option value="EUR"' + (currentCurrency === 'EUR' ? ' selected' : '') + '>EUR (€) · Euro</option><option value="GBP"' + (currentCurrency === 'GBP' ? ' selected' : '') + '>GBP (£) · British Pound</option></select></label><p class="form-note">Changes the display and calculation currency across your workspace.</p>', 'businessForm');
 }
 async function submitForm(form) {
   const save = form.querySelector('button[type="submit"]');
@@ -467,6 +470,10 @@ document.addEventListener('click', async event => {
     }
     return;
   }
+  if (event.target.closest('#themeToggle')) {
+    toggleTheme();
+    return;
+  }
   if (event.target.closest('#helpButton')) toast('Add your records first. Workspace figures are calculated from saved data.');
   if (event.target.closest('#notificationButton')) setView('approvals');
 });
@@ -509,7 +516,30 @@ function connectLiveUpdates() {
     state.syncTimer = setTimeout(() => refresh().catch(() => {}), 180);
   });
 }
-document.querySelector('#openSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.add('open'); document.querySelector('#mobileScrim').classList.add('visible'); });
-document.querySelector('#closeSidebar').addEventListener('click', () => { document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#mobileScrim').classList.remove('visible'); });
-document.querySelector('#mobileScrim').addEventListener('click', () => { document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#mobileScrim').classList.remove('visible'); });
+function getTheme() {
+  return localStorage.getItem('astra_theme') || 'dark';
+}
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  if (theme === 'dark') document.documentElement.classList.add('dark');
+  else document.documentElement.classList.remove('dark');
+  localStorage.setItem('astra_theme', theme);
+  const toggleBtn = document.querySelector('#themeToggle');
+  if (toggleBtn) {
+    toggleBtn.innerHTML = icon(theme === 'dark' ? 'sun' : 'theme', 16);
+    toggleBtn.setAttribute('title', theme === 'dark' ? 'Switch to Classic Light Theme' : 'Switch to Stitch Precision Dark Theme');
+  }
+}
+function toggleTheme() {
+  const current = getTheme();
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  toast(next === 'dark' ? 'Switched to Stitch Precision Dark Theme' : 'Switched to Classic Light Theme');
+}
+document.querySelector('#openSidebar')?.addEventListener('click', () => { document.querySelector('#sidebar').classList.add('open'); document.querySelector('#mobileScrim').classList.add('visible'); });
+document.querySelector('#closeSidebar')?.addEventListener('click', () => { document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#mobileScrim').classList.remove('visible'); });
+document.querySelector('#mobileScrim')?.addEventListener('click', () => { document.querySelector('#sidebar').classList.remove('open'); document.querySelector('#mobileScrim').classList.remove('visible'); });
+
+applyTheme(getTheme());
+
 refresh().then(connectLiveUpdates).catch(error => { viewRoot.innerHTML = '<div class="empty-state">Could not load the workspace: ' + esc(error.message) + '. Start the project with npm start, then reload.</div>'; });

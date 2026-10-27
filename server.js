@@ -572,11 +572,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'PATCH' && url.pathname === '/api/business') {
       const payload = await body(req);
-      const name = String(payload.name || '').trim().slice(0, 100);
-      if (!name) return send(res, 400, { error: 'Enter your business or workspace name.' });
+      const name = String(payload.name ?? '').trim().slice(0, 100);
+      const currency = String(payload.currency ?? '').trim().toUpperCase().slice(0, 5);
+      if (!name && !currency) return send(res, 400, { error: 'Enter your business name or select a valid currency.' });
       const result = await mutate(db => {
-        db.business.name = name;
-        addEvent(db, 'Workspace settings', 'Business name updated', name, 'Completed', 'grid', 'green');
+        if (payload.name !== undefined) db.business.name = name;
+        if (currency) db.business.currency = currency;
+        addEvent(db, 'Workspace settings', 'Workspace settings updated', `Name: ${db.business.name || 'Unnamed'} · Currency: ${db.business.currency}`, 'Completed', 'grid', 'green');
         return db.business;
       });
       return send(res, 200, { business: result });
@@ -608,13 +610,13 @@ const server = http.createServer(async (req, res) => {
       });
       return fs.createReadStream(file).pipe(res);
     }
-    if (req.method === 'GET') {
+    if (req.method === 'GET' || req.method === 'HEAD') {
       const requested = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
       const file = path.resolve(PUBLIC, `.${requested}`);
       if (!file.startsWith(`${PUBLIC}${path.sep}`) && file !== path.join(PUBLIC, 'index.html')) return send(res, 403, { error: 'Forbidden.' });
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-      return res.end(fs.readFileSync(file));
+      return req.method === 'HEAD' ? res.end() : res.end(fs.readFileSync(file));
     }
     return send(res, 404, { error: 'Route not found.' });
   } catch (error) {
