@@ -10,15 +10,20 @@ const DATA_DIR = path.resolve(process.env.ERP_DATA_DIR || (isServerless ? path.j
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
-const TIME_ZONE = process.env.TZ || 'Asia/Kolkata';
+const rawTz = (process.env.TZ || 'Asia/Kolkata').replace(/^:/, '');
+const TIME_ZONE = rawTz === 'UTC' || rawTz.includes('/') ? rawTz : 'Asia/Kolkata';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.csv': 'text/csv; charset=utf-8' };
 const clients = new Set();
 let mutationQueue = Promise.resolve();
 
 function todayIso() {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}`;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${value.year}-${value.month}-${value.day}`;
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
 }
 function freshDb() {
   return {
