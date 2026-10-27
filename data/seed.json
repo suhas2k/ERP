@@ -1,0 +1,110 @@
+{
+  "business": {
+    "name": "Astra Operations",
+    "currency": "INR"
+  },
+  "sync": {
+    "lastSyncAt": null,
+    "lastSource": "",
+    "entity": "",
+    "created": 0,
+    "updated": 0,
+    "mode": ""
+  },
+  "orders": [
+    {
+      "id": "SO-00001",
+      "customer": "Quantum Tech Corp",
+      "initials": "QT",
+      "inventoryId": "c92714be-0763-48c8-b7fe-cc556acd35c6",
+      "sku": "SKU-PREC-01",
+      "item": "Precision Micro-Sensor Module",
+      "quantity": 15,
+      "unitPrice": 890,
+      "amount": 13350,
+      "status": "Processing",
+      "priority": "Normal",
+      "createdAt": "2026-10-27T15:41:29.730Z"
+    }
+  ],
+  "inventory": [
+    {
+      "id": "c92714be-0763-48c8-b7fe-cc556acd35c6",
+      "sku": "SKU-PREC-01",
+      "name": "Precision Micro-Sensor Module",
+      "category": "Sensors",
+      "onHand": 120,
+      "reserved": 15,
+      "reorderLevel": 25,
+      "unitCost": 450,
+      "sellingPrice": 890,
+      "supplier": "Apex Dynamics",
+      "createdAt": "2026-10-27T15:38:15.667Z"
+    }
+  ],
+  "invoices": [
+    {
+      "id": "INV-05001",
+      "invoiceNumber": "INV-05001",
+      "externalId": "INV-05001",
+      "customer": "Quantum Tech Corp",
+      "amount": 13350,
+      "issueDate": "2026-10-20",
+      "dueDate": "2026-10-25",
+      "status": "Overdue",
+      "currency": "INR"
+    }
+  ],
+  "invoiceReminders": [],
+  "workflows": [
+    {
+      "id": "wf-stock",
+      "name": "Smart replenishment",
+      "description": "Prepare a purchase request when available stock reaches its reorder point.",
+      "trigger": "Available stock at or below reorder point",
+      "runs": 1,
+      "active": true,
+      "icon": "inventory",
+      "color": "violet"
+    },
+    {
+      "id": "wf-invoice",
+      "name": "Invoice follow-up",
+      "description": "Prepare a reminder draft for an overdue open invoice.",
+      "trigger": "Invoice due date has passed",
+      "runs": 1,
+      "active": true,
+      "icon": "receipt",
+      "color": "amber"
+    },
+    {
+      "id": "wf-orders",
+      "name": "Order triage",
+      "description": "Summarise open orders and highlight high-priority work.",
+      "trigger": "Manual workflow run",
+      "runs": 0,
+      "active": true,
+      "icon": "orders",
+      "color": "blue"
+    }
+  ],
+  "approvals": [],
+  "activity": [
+    {
+      "id": "EV-00001",
+      "agent": "System",
+      "title": "Workspace initialized",
+      "description": "Astra Precision Enterprise workspace initialized with INR currency.",
+      "status": "Active",
+      "icon": "grid",
+      "color": "blue",
+      "createdAt": "2026-10-27T15:35:00.000Z"
+    }
+  ],
+  "nextOrder": 2,
+  "nextSku": 2,
+  "nextInvoice": 5002,
+  "nextReminder": 1,
+  "nextApproval": 1,
+  "nextEvent": 2
+}

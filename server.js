@@ -5,7 +5,8 @@ const crypto = require('node:crypto');
 
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
-const DATA_DIR = path.resolve(process.env.ERP_DATA_DIR || path.join(ROOT, 'data'));
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const DATA_DIR = path.resolve(process.env.ERP_DATA_DIR || (isServerless ? path.join('/tmp', 'data') : path.join(ROOT, 'data')));
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -31,20 +32,53 @@ function freshDb() {
     approvals: [], activity: [], nextOrder: 1, nextSku: 1, nextInvoice: 1, nextReminder: 1, nextApproval: 1, nextEvent: 1
   };
 }
+let memoryDb = null;
+
 function readDb() {
-  if (!fs.existsSync(DB_FILE)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DB_FILE, `${JSON.stringify(freshDb(), null, 2)}\n`);
+  try {
+    if (!fs.existsSync(DB_FILE)) {
+      try {
+        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+        const seedPath = path.join(ROOT, 'data', 'seed.json');
+        const dbPath = path.join(ROOT, 'data', 'db.json');
+        if (fs.existsSync(seedPath)) {
+          fs.copyFileSync(seedPath, DB_FILE);
+        } else if (fs.existsSync(dbPath)) {
+          fs.copyFileSync(dbPath, DB_FILE);
+        } else {
+          fs.writeFileSync(DB_FILE, `${JSON.stringify(freshDb(), null, 2)}\n`);
+        }
+      } catch (e) {
+        console.warn('Filesystem init warning, will fallback to memoryDb:', e.message);
+      }
+    }
+    if (fs.existsSync(DB_FILE)) {
+      const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      if (!db.sync) db.sync = freshDb().sync;
+      memoryDb = db;
+      return db;
+    }
+  } catch (err) {
+    console.warn('Filesystem read failed, using memory fallback:', err.message);
   }
-  const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-  if (!db.sync) db.sync = freshDb().sync;
-  return db;
+  if (!memoryDb) memoryDb = freshDb();
+  return memoryDb;
 }
+
 function writeDb(db) {
-  const temp = `${DB_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, `${JSON.stringify(db, null, 2)}\n`);
-  fs.renameSync(temp, DB_FILE);
+  memoryDb = db;
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const temp = `${DB_FILE}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(temp, `${JSON.stringify(db, null, 2)}\n`);
+    fs.renameSync(temp, DB_FILE);
+  } catch (err) {
+    console.warn('Filesystem write failed, kept in memory:', err.message);
+  }
 }
+
 function send(res, status, data, type = 'application/json; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
   res.end(type.startsWith('application/json') ? JSON.stringify(data) : data);
@@ -73,7 +107,9 @@ function mutate(work) {
 }
 function publishUpdate() {
   const message = `event: workspace.updated\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`;
-  for (const client of clients) client.write(message);
+  for (const client of clients) {
+    try { client.write(message); } catch {}
+  }
 }
 function addEvent(db, agent, title, description, status, icon, color) {
   const event = { id: `EV-${String(db.nextEvent++).padStart(5, '0')}`, agent, title, description, status, icon, color, createdAt: new Date().toISOString() };
@@ -313,22 +349,29 @@ function normalizeCsvRows(entity, rows) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = url.searchParams.get('_route') || req.headers['x-matched-path'] || url.pathname;
   try {
-    if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
+    if (req.method === 'GET' && pathname === '/api/bootstrap') {
+      if (isServerless) {
+        try { await runBackgroundAutomation(); } catch {}
+      }
       const db = readDb();
       return send(res, 200, { ...db, derived: calculateDerived(db), agentMode: process.env.OPENAI_API_KEY ? 'openai' : 'local-rules' });
     }
-    if (req.method === 'GET' && url.pathname === '/api/events') {
+    if (req.method === 'GET' && pathname === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write(`event: connected\ndata: {}\n\n`);
+      if (isServerless) return res.end();
       clients.add(res);
-      const heartbeat = setInterval(() => res.write(': keep-alive\n\n'), 20000);
+      const heartbeat = setInterval(() => {
+        try { res.write(': keep-alive\n\n'); } catch { clearInterval(heartbeat); }
+      }, 20000);
       res.on('close', () => { clearInterval(heartbeat); clients.delete(res); });
       return;
     }
-    if (req.method === 'POST' && url.pathname === '/api/agent/run') {
+    if (req.method === 'POST' && pathname === '/api/agent/run') {
       const payload = await body(req);
       const command = String(payload.command || '').trim().slice(0, 240);
       if (!command) return send(res, 400, { error: 'Enter a workflow request first.' });
@@ -341,7 +384,7 @@ const server = http.createServer(async (req, res) => {
       const result = await mutate(db => runAgent(db, command, plan));
       return send(res, 200, result);
     }
-    if (req.method === 'POST' && url.pathname === '/api/import/csv') {
+    if (req.method === 'POST' && pathname === '/api/import/csv') {
       const payload = await body(req);
       const entity = String(payload.entity || '');
       const records = normalizeCsvRows(entity, payload.records);
@@ -425,7 +468,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, result);
     }
-    if (req.method === 'POST' && url.pathname === '/api/inventory') {
+    if (req.method === 'POST' && pathname === '/api/inventory') {
       const payload = await body(req);
       const name = String(payload.name || '').trim().slice(0, 100);
       const skuInput = String(payload.sku || '').trim().slice(0, 40);
@@ -445,7 +488,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 201, { item: result });
     }
-    const inventoryMatch = url.pathname.match(/^\/api\/inventory\/([^/]+)\/adjust$/);
+    const inventoryMatch = pathname.match(/^\/api\/inventory\/([^/]+)\/adjust$/);
     if (req.method === 'POST' && inventoryMatch) {
       const payload = await body(req);
       const quantity = Number(payload.quantity);
@@ -462,7 +505,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { item: result });
     }
-    if (req.method === 'POST' && url.pathname === '/api/orders') {
+    if (req.method === 'POST' && pathname === '/api/orders') {
       const payload = await body(req);
       const customer = String(payload.customer || '').trim().slice(0, 100);
       const inventoryId = String(payload.inventoryId || '');
@@ -482,8 +525,8 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 201, { order: result });
     }
-    if (req.method === 'PATCH' && url.pathname.startsWith('/api/orders/')) {
-      const id = decodeURIComponent(url.pathname.split('/').pop());
+    if (req.method === 'PATCH' && pathname.startsWith('/api/orders/')) {
+      const id = decodeURIComponent(pathname.split('/').pop());
       const payload = await body(req);
       const result = await mutate(db => {
         const order = db.orders.find(item => item.id === id);
@@ -501,7 +544,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { order: result });
     }
-    if (req.method === 'POST' && url.pathname === '/api/invoices') {
+    if (req.method === 'POST' && pathname === '/api/invoices') {
       const payload = await body(req);
       const customer = String(payload.customer || '').trim().slice(0, 100);
       const amount = Number(payload.amount);
@@ -518,8 +561,8 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 201, { invoice: result });
     }
-    if (req.method === 'PATCH' && url.pathname.startsWith('/api/invoices/')) {
-      const id = decodeURIComponent(url.pathname.split('/').pop());
+    if (req.method === 'PATCH' && pathname.startsWith('/api/invoices/')) {
+      const id = decodeURIComponent(pathname.split('/').pop());
       const payload = await body(req);
       if (payload.status !== 'Paid') return send(res, 400, { error: 'Only marking an invoice paid is supported.' });
       const result = await mutate(db => {
@@ -533,7 +576,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { invoice: result });
     }
-    const approvalMatch = url.pathname.match(/^\/api\/approvals\/([^/]+)$/);
+    const approvalMatch = pathname.match(/^\/api\/approvals\/([^/]+)$/);
     if (req.method === 'POST' && approvalMatch) {
       const payload = await body(req);
       if (!['approve', 'reject', 'receive'].includes(payload.decision)) return send(res, 400, { error: 'Decision must be approve, reject, or receive.' });
@@ -558,7 +601,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { approval: result });
     }
-    const workflowMatch = url.pathname.match(/^\/api\/workflows\/([^/]+)$/);
+    const workflowMatch = pathname.match(/^\/api\/workflows\/([^/]+)$/);
     if (req.method === 'PATCH' && workflowMatch) {
       const payload = await body(req);
       const result = await mutate(db => {
@@ -570,7 +613,7 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { workflow: result });
     }
-    if (req.method === 'PATCH' && url.pathname === '/api/business') {
+    if (req.method === 'PATCH' && pathname === '/api/business') {
       const payload = await body(req);
       const name = String(payload.name ?? '').trim().slice(0, 100);
       const currency = String(payload.currency ?? '').trim().toUpperCase().slice(0, 5);
@@ -583,35 +626,41 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { business: result });
     }
-    if (req.method === 'GET' && url.pathname === '/api/export') {
+    if (req.method === 'GET' && pathname === '/api/export') {
       const json = JSON.stringify(readDb(), null, 2);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="erp-backup.json"', 'Cache-Control': 'no-store' });
       return res.end(json);
     }
-    if (req.method === 'GET' && url.pathname === '/download/online-retail-uci.csv') {
+    if (req.method === 'GET' && pathname === '/download/online-retail-uci.csv') {
       const file = path.join(PUBLIC, 'datasets', 'online-retail-uci.csv');
-      if (!fs.existsSync(file)) return send(res, 404, 'Dataset not found', 'text/plain; charset=utf-8');
-      res.writeHead(200, {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="online-retail-uci.csv"',
-        'Content-Length': fs.statSync(file).size,
-        'Cache-Control': 'no-store'
-      });
-      return fs.createReadStream(file).pipe(res);
+      if (fs.existsSync(file)) {
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="online-retail-uci.csv"',
+          'Content-Length': fs.statSync(file).size,
+          'Cache-Control': 'no-store'
+        });
+        return fs.createReadStream(file).pipe(res);
+      }
+      res.writeHead(302, { Location: '/datasets/online-retail-uci.csv' });
+      return res.end();
     }
-    if (req.method === 'GET' && url.pathname === '/download/uci-retail-invoices-5000.csv') {
+    if (req.method === 'GET' && pathname === '/download/uci-retail-invoices-5000.csv') {
       const file = path.join(PUBLIC, 'datasets', 'uci-retail-invoices-5000.csv');
-      if (!fs.existsSync(file)) return send(res, 404, 'Dataset not found', 'text/plain; charset=utf-8');
-      res.writeHead(200, {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="uci-retail-invoices-5000.csv"',
-        'Content-Length': fs.statSync(file).size,
-        'Cache-Control': 'no-store'
-      });
-      return fs.createReadStream(file).pipe(res);
+      if (fs.existsSync(file)) {
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="uci-retail-invoices-5000.csv"',
+          'Content-Length': fs.statSync(file).size,
+          'Cache-Control': 'no-store'
+        });
+        return fs.createReadStream(file).pipe(res);
+      }
+      res.writeHead(302, { Location: '/datasets/uci-retail-invoices-5000.csv' });
+      return res.end();
     }
     if (req.method === 'GET' || req.method === 'HEAD') {
-      const requested = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+      const requested = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
       const file = path.resolve(PUBLIC, `.${requested}`);
       if (!file.startsWith(`${PUBLIC}${path.sep}`) && file !== path.join(PUBLIC, 'index.html')) return send(res, 403, { error: 'Forbidden.' });
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, 'Not found', 'text/plain; charset=utf-8');
@@ -624,10 +673,17 @@ const server = http.createServer(async (req, res) => {
     if (status === 500) console.error(error);
     return send(res, status, { error: error.message || 'The request could not be completed.' });
   }
-});
+}
 
-readDb();
-server.listen(PORT, HOST, () => console.log(`Astra ERP is running at http://${HOST}:${PORT}`));
-const automationTimer = setInterval(() => runBackgroundAutomation().catch(error => console.error('Background workflow error:', error)), 60000);
-automationTimer.unref();
-setTimeout(() => runBackgroundAutomation().catch(error => console.error('Startup workflow error:', error)), 250);
+const server = http.createServer(handleRequest);
+
+if (require.main === module && !isServerless) {
+  readDb();
+  server.listen(PORT, HOST, () => console.log(`Astra ERP is running at http://${HOST}:${PORT}`));
+  const automationTimer = setInterval(() => runBackgroundAutomation().catch(error => console.error('Background workflow error:', error)), 60000);
+  automationTimer.unref();
+  setTimeout(() => runBackgroundAutomation().catch(error => console.error('Startup workflow error:', error)), 250);
+}
+
+module.exports = handleRequest;
+module.exports.server = server;
